@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#101827"><title>Warranty Details | Tap-to-Warranty</title><link rel="stylesheet" href="styles.css"></head>
+<body><header class="topbar"><a class="brand" href="index.html"><span class="brand-icon">✓</span> Tap-to-Warranty</a><a class="navlink" href="index.html">Scan another</a></header>
+<main class="container narrow"><section class="hero compact"><span class="eyebrow">PRODUCT PROTECTION</span><h1>Warranty details</h1><p>Verified details for the warranty ID scanned.</p></section>
+<section id="loading" class="panel center"><div class="spinner"></div><p>Loading warranty details…</p></section>
+<section id="error" class="panel hidden"><h2>Warranty not found</h2><p id="errorText">We could not find this warranty record.</p><a class="button primary inline-button" href="index.html">Scan again</a></section>
+<section id="details" class="panel hidden">
+  <div class="status-row"><div><span class="muted small">WARRANTY ID</span><h2 id="wId">—</h2></div><span id="status" class="status">Checking…</span></div>
+  <div class="product-heading"><div class="product-symbol">▣</div><div><h2 id="productName">—</h2><p id="brand" class="muted">—</p></div></div>
+  <div class="detail-grid"><div class="detail"><span>Customer</span><strong id="customerName">—</strong></div><div class="detail"><span>Product / Model</span><strong id="model">—</strong></div><div class="detail"><span>Purchase date</span><strong id="purchaseDate">—</strong></div><div class="detail"><span>Warranty expiry</span><strong id="expiryDate">—</strong></div><div class="detail"><span>Coverage</span><strong id="coverage">—</strong></div><div class="detail"><span>Serial number</span><strong id="serial">—</strong></div></div>
+  <div class="section-line"><h3>Warranty terms</h3><p id="terms">Contact the shop for the applicable warranty terms.</p></div>
+  <div class="section-line"><h3>Service history</h3><div id="serviceHistory" class="timeline"><p class="muted">No service records yet.</p></div></div>
+  <p class="muted tiny">For corrections or service requests, contact the issuing shop. This page displays the record currently stored in the warranty database.</p>
+</section><a class="back-link" href="index.html">← Back to scanner</a></main><footer>Tap-to-Warranty · Digital warranty & service tracking</footer>
+<script type="module">
+import { db, doc, getDoc, collection, getDocs, query, orderBy } from './firebase.js';
+const $ = id => document.getElementById(id);
+const id = new URLSearchParams(location.search).get('id');
+function showError(message) { $('loading').classList.add('hidden'); $('details').classList.add('hidden'); $('error').classList.remove('hidden'); $('errorText').textContent = message; }
+function dateText(value) { if (!value) return 'Not provided'; const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value); return Number.isNaN(d.getTime()) ? 'Not provided' : d.toLocaleDateString(undefined, {day:'2-digit',month:'short',year:'numeric'}); }
+function setText(key, value) { $(key).textContent = value || 'Not provided'; }
+if (!id) showError('The QR code or link does not contain a warranty ID. Please scan again.');
+else {
+  try {
+    const snap = await getDoc(doc(db, 'warranties', id));
+    if (!snap.exists()) showError('No database record exists for ID “' + id + '”. The shopkeeper must register this warranty first.');
+    else {
+      const w = snap.data();
+      setText('wId', id); setText('productName', w.productName); setText('brand', w.brand); setText('customerName', w.customerLabel || 'Registered customer');
+      setText('model', w.model); setText('purchaseDate', dateText(w.purchaseDate)); setText('expiryDate', dateText(w.expiryDate)); setText('coverage', w.coverage || (w.warrantyMonths ? w.warrantyMonths + ' months' : 'Not provided')); setText('serial', w.serialNumber); setText('terms', w.terms || 'Refer to the original warranty card or contact the issuing shop.');
+      let state = 'Active'; const now = new Date(); const start = w.purchaseDate ? new Date(typeof w.purchaseDate.toDate === 'function' ? w.purchaseDate.toDate() : w.purchaseDate) : null; const end = w.expiryDate ? new Date(typeof w.expiryDate.toDate === 'function' ? w.expiryDate.toDate() : w.expiryDate) : null;
+      if (w.status === 'void') state = 'Voided'; else if (start && start > now) state = 'Not started'; else if (end && end < now) state = 'Expired';
+      $('status').textContent = state; $('status').className = 'status ' + (state === 'Active' ? 'active' : 'inactive');
+      try {
+        const serviceSnap = await getDocs(query(collection(db, 'warranties', id, 'services'), orderBy('createdAt', 'desc')));
+        const history = $('serviceHistory'); history.replaceChildren();
+        if (serviceSnap.empty) history.innerHTML = '<p class="muted">No service records yet.</p>';
+        else serviceSnap.forEach(s => { const v = s.data(); const item = document.createElement('div'); item.className = 'timeline-item'; const title = document.createElement('strong'); title.textContent = v.title || v.type || 'Service update'; const desc = document.createElement('p'); desc.textContent = v.notes || ''; const date = document.createElement('span'); date.className = 'muted small'; date.textContent = dateText(v.createdAt); item.append(title, desc, date); history.append(item); });
+      } catch (_) { $('serviceHistory').innerHTML = '<p class="muted">Service history is not available yet.</p>'; }
+      $('loading').classList.add('hidden'); $('details').classList.remove('hidden');
+    }
+  } catch (err) { showError('Could not load the database. Check the Firebase configuration, internet connection, and Firestore rules.'); console.error(err); }
+}
+</script></body></html>

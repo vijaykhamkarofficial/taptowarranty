@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#101827"><title>Tap-to-Warranty | Scan</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+<header class="topbar"><a class="brand" href="index.html"><span class="brand-icon">✓</span> Tap-to-Warranty</a><a class="navlink" href="admin.html">Shopkeeper login</a></header>
+<main class="container narrow">
+  <section class="hero"><span class="eyebrow">DIGITAL WARRANTY</span><h1>Scan your product QR</h1><p>Scan the QR code on your warranty card or product label to view coverage details.</p></section>
+  <section class="panel"><div id="reader" class="reader"></div><div class="actions"><button id="startScan" class="button primary">Start camera scanner</button><button id="stopScan" class="button secondary" disabled>Stop scanner</button></div><p id="scanMessage" class="muted small" role="status">You can also paste a warranty ID or open a warranty link.</p>
+  <form id="lookupForm" class="lookup"><label for="warrantyId">Warranty ID or scanned code</label><div class="input-row"><input id="warrantyId" placeholder="e.g. TW-ABC123" autocomplete="off" required><button class="button primary" type="submit">View details</button></div></form>
+  </section>
+  <p class="muted small center">Camera access requires HTTPS or localhost. If camera scanning does not work, use the ID field.</p>
+</main>
+<footer>Tap-to-Warranty · Digital warranty & service tracking</footer>
+<script>
+const $ = id => document.getElementById(id);
+let scanner = null;
+function extractId(raw) {
+  const value = String(raw || '').trim();
+  try {
+    if (/^https?:\/\//i.test(value)) {
+      const url = new URL(value);
+      const id = url.searchParams.get('id') || url.searchParams.get('warrantyId');
+      if (id) return id;
+    }
+  } catch (_) {}
+  // Supports legacy text like DEMO-WARRANTY:TW-ABC123:extra-data
+  if (value.startsWith('DEMO-WARRANTY:')) return value.split(':')[1] || '';
+  if (value.startsWith('TAP-WARRANTY:')) return value.split(':')[1] || '';
+  return value;
+}
+function openWarranty(raw) {
+  const id = extractId(raw);
+  if (!id) { $('scanMessage').textContent = 'Could not find a warranty ID in that QR code.'; return; }
+  location.href = 'warranty.html?id=' + encodeURIComponent(id);
+}
+$('lookupForm').addEventListener('submit', e => { e.preventDefault(); openWarranty($('warrantyId').value); });
+$('startScan').addEventListener('click', async () => {
+  if (!window.Html5Qrcode) { $('scanMessage').textContent = 'Scanner library could not load. Check your internet connection or enter the ID manually.'; return; }
+  try {
+    scanner = scanner || new Html5Qrcode('reader');
+    $('scanMessage').textContent = 'Requesting camera permission…';
+    await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, text => { scanner.stop().catch(()=>{}); openWarranty(text); }, () => {});
+    $('startScan').disabled = true; $('stopScan').disabled = false; $('scanMessage').textContent = 'Point your camera at the QR code.';
+  } catch (err) { $('scanMessage').textContent = 'Camera could not start. Allow camera permission and use HTTPS, or enter the warranty ID manually.'; }
+});
+$('stopScan').addEventListener('click', async () => { if (scanner && scanner.isScanning) await scanner.stop(); $('startScan').disabled = false; $('stopScan').disabled = true; $('scanMessage').textContent = 'Scanner stopped.'; });
+const params = new URLSearchParams(location.search); const incoming = params.get('id') || params.get('warrantyId'); if (incoming) { $('warrantyId').value = incoming; openWarranty(incoming); }
+</script>
+</body></html>
